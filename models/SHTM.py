@@ -119,8 +119,8 @@ class SHTM(nn.Module):
         img_patches = img_patches.reshape(B, C, kernel_size, kernel_size, N).permute(0, 4, 1, 2, 3)  # [B, N, C, K, K]
         mask_patches = mask_patches.reshape(B, 1, kernel_size, kernel_size, N).permute(0, 4, 1, 2, 3)  # [B, N, 1, K, K]
 
-        # Step 1: Filter valid reference blocks (formula 2)
-        # Valid condition: 1. intersect with damaged region; 2. known pixel ratio > tau_valid_ratio
+        
+        
         damaged_ratio = mask_patches.mean(dim=[2, 3, 4])  # [B, N]
         has_damaged = (damaged_ratio > 0) & (damaged_ratio < 1.0)  # intersect with damaged region
         known_ratio = 1.0 - damaged_ratio
@@ -135,35 +135,30 @@ class SHTM(nn.Module):
         # Extract valid reference patches
         ref_patches = img_patches[torch.arange(B).unsqueeze(1), valid_idx]  # [B, N_valid, C, K, K]
         ref_mask = mask_patches[torch.arange(B).unsqueeze(1), valid_idx]  # [B, N_valid, 1, K, K]
-        ref_weight = 1.0 - ref_mask  # weight: 1 for known pixel, 0 for damaged (formula 3)
+        ref_weight = 1.0 - ref_mask  
 
-        # Step 2: Neighborhood search window limit
         half_window = self.search_window // 2
         H_patch = H - kernel_size + 1
         W_patch = W - kernel_size + 1
         patch_coords = torch.stack(torch.meshgrid(torch.arange(H_patch), torch.arange(W_patch), indexing="ij"), dim=-1).reshape(-1, 2).to(img.device)  # [N, 2]
         ref_coords = patch_coords[valid_idx]  # [B, N_valid, 2]
 
-        # Compute distance between patch coordinates, filter neighborhood
         coord_dist = torch.cdist(ref_coords.float(), patch_coords.float(), p=2)  # [B, N_valid, N]
         in_neighborhood = coord_dist <= half_window  # only search in neighborhood
 
-        # Step 3: Weighted Euclidean distance (formula 3)
         ref_flat = ref_patches.reshape(B, N_valid, -1)  # [B, N_valid, C*K*K]
         all_flat = img_patches.reshape(B, N, -1)  # [B, N, C*K*K]
         weight_flat = ref_weight.reshape(B, N_valid, -1)  # [B, N_valid, C*K*K]
 
-        # Weighted distance: sum(w_ij * (p_ref - p_cand)^2)
         dist = torch.sum(
             weight_flat.unsqueeze(2) * (ref_flat.unsqueeze(2) - all_flat.unsqueeze(1)) ** 2,
             dim=-1
         )  # [B, N_valid, N]
 
-        # Mask out non-neighborhood blocks and self block
         dist = torch.where(in_neighborhood, dist, torch.inf * torch.ones_like(dist))
         dist.scatter_(2, valid_idx.unsqueeze(2), torch.inf * torch.ones_like(valid_idx.unsqueeze(2), dtype=dist.dtype))
 
-        # Step 4: Select top-k similar blocks
+
         topk_indices = torch.topk(-dist, k=self.topk_blocks, dim=-1, largest=True).indices  # [B, N_valid, topk_blocks]
 
         return img_patches, valid_idx, topk_indices
@@ -175,16 +170,14 @@ class SHTM(nn.Module):
 
         B, m, n = block_group.shape  # n = C*block_size*block_size
 
-        # Construct similarity matrix M: [B, n, m] (row=pixel position, column=similar block)
+
         M = block_group.permute(0, 2, 1)  # [B, n, m]
 
-        # Compute row-wise Euclidean distance (formula 4)
         row_dist = torch.cdist(M, M, p=2)  # [B, n, n]
 
-        # Select top-q similar rows for each reference row
         topk_row_indices = torch.topk(-row_dist, k=self.topk_rows, dim=-1, largest=True).indices  # [B, n, q]
 
-        # Gather similar rows to construct G_q,m (formula 5)
+
         B_idx = torch.arange(B, device=M.device).reshape(B, 1, 1, 1)
         n_idx = torch.arange(n, device=M.device).reshape(1, n, 1, 1)
         q_idx = torch.arange(self.topk_rows, device=M.device).reshape(1, 1, self.topk_rows, 1)
@@ -199,22 +192,19 @@ class SHTM(nn.Module):
 
         Bn, q, m = coeffs.shape
 
-        # Step 1: Structural hard-thresholding (formula 8)
-        # Preserve first row and first column (low-frequency structure), set other high-frequency to 0
         structural_mask = torch.zeros_like(coeffs, dtype=torch.bool)
         structural_mask[:, 0, :] = True  # first row
         structural_mask[:, :, 0] = True  # first column
         coeffs = torch.where(structural_mask, coeffs, torch.zeros_like(coeffs))
 
-        # Step 2: Adaptive hard-thresholding on low-frequency coefficients (formula 9-10)
-        # Estimate noise level sigma from high-frequency subband (diagonal HH)
+      
         hh_coeffs = coeffs[:, 1:, 1:]
         sigma = torch.std(hh_coeffs, dim=[1, 2], keepdim=True)  # [Bn, 1, 1]
 
-        # Compute adaptive threshold tau
+      
         tau = sigma * torch.sqrt(2 * torch.log(torch.tensor(q * m, dtype=torch.float32, device=coeffs.device)) + self.eps)
 
-        # Thresholding: keep coefficients with absolute value >= tau
+     
         coeffs = torch.where(torch.abs(coeffs) >= tau, coeffs, torch.zeros_like(coeffs))
 
         return coeffs
@@ -233,40 +223,37 @@ class SHTM(nn.Module):
         mask_padded, _ = self._pad_image(mask)
         pad_H, pad_W = img_padded.shape[2:]
 
-        # Step 1: Block-level matching
+    
         all_patches, valid_idx, topk_block_indices = self.block_level_matching(img_padded, mask_padded)
         N_valid = valid_idx.shape[1]
         if N_valid == 0:
             return img  # no damaged region, return original image
 
-        # Step 2: Process each valid reference block
-        # Gather similar block groups
         B_idx = torch.arange(B, device=device).reshape(B, 1, 1).repeat(1, N_valid, self.topk_blocks)
         block_groups = all_patches[B_idx, topk_block_indices]  # [B, N_valid, topk_blocks, C, K, K]
         block_groups_flat = block_groups.reshape(B * N_valid, self.topk_blocks, -1)  # [B*N_valid, m, C*K*K]
 
-        # Step 3: Row-level matching
+      
         pixel_groups = self.row_level_matching(block_groups_flat)  # [B*N_valid, n, q, m]
         Bn, n, q, m = pixel_groups.shape
 
-        # Step 4: 2D Haar Transform
+       
         pixel_groups_reshaped = pixel_groups.reshape(Bn * n, q, m)  # [Bn*n, q, m]
         haar_coeffs = self._haar_transform_2d(pixel_groups_reshaped)  # [Bn*n, q, m]
 
-        # Step 5: Adaptive dual-threshold processing
+       
         thresholded_coeffs = self.adaptive_dual_threshold(haar_coeffs)  # [Bn*n, q, m]
 
-        # Step 6: Inverse Haar Transform
+      
         restored_groups = self._inverse_haar_transform_2d(thresholded_coeffs)  # [Bn*n, q, m]
         restored_groups = restored_groups.reshape(Bn, n, q, m)  # [Bn, n, q, m]
 
-        # Step 7: Aggregation (average over similar rows) + reshape back to blocks
+       
         restored_blocks = restored_groups.mean(dim=2)  # [Bn, n, m]
         restored_blocks = restored_blocks.mean(dim=-1)  # [Bn, n] (average over similar blocks)
         restored_blocks = restored_blocks.reshape(B, N_valid, C, self.block_size, self.block_size)  # [B, N_valid, C, K, K]
 
-        # Step 8: Backfill to image (only damaged regions)
-        # Initialize output with original image
+      
         output = img_padded.clone()
         # Create weight map for overlapping blocks
         weight_map = torch.zeros_like(output)
