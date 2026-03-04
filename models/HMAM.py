@@ -31,8 +31,7 @@ class ExternalAttention(nn.Module):
 
         B, N, _ = x.shape
 
-        # Step 1: Compute attention weight (formula 12-15)
-        # F_h · M_k^T: [B, N, d_head] @ [d_head, mem_dim] -> [B, N, mem_dim]
+      
         attn = x @ self.M_k.T
 
         # Column-wise softmax normalization (formula 14, core of external attention)
@@ -40,8 +39,7 @@ class ExternalAttention(nn.Module):
         # L1 normalization along the feature dimension
         attn = attn / (torch.sum(attn, dim=-1, keepdim=True) + self.eps)
 
-        # Step 2: Compute head output (formula 16)
-        # A_h · M_v: [B, N, mem_dim] @ [mem_dim, d_head] -> [B, N, d_head]
+    
         out = attn @ self.M_v
 
         return out
@@ -64,8 +62,7 @@ class HMAM(nn.Module):
         self.d_head = d_head
         self.total_dim = num_heads * d_head
 
-        # Step 1: Channel alignment for hierarchical multi-scale features
-        # Align cross-layer encoder features to the same channel dimension
+   
         self.scale_proj = nn.ModuleList()
         total_in_channels = in_channels
 
@@ -79,23 +76,23 @@ class HMAM(nn.Module):
                 )
             total_in_channels = in_channels * (1 + len(self.multi_scale_channels))
 
-        # Step 2: Input projection & normalization
+   
         self.in_proj = nn.Conv2d(total_in_channels, self.total_dim, kernel_size=1, stride=1, padding=0)
         self.norm = norm_layer(self.total_dim)
 
-        # Step 3: Multi-head external attention
+      
         self.heads = nn.ModuleList([
             ExternalAttention(d_head=d_head, mem_dim=mem_dim)
             for _ in range(num_heads)
         ])
 
-        # Step 4: Output fusion (W0 in formula 17, 1×1 convolution)
+    
         self.out_proj = nn.Sequential(
             nn.Conv2d(self.total_dim, in_channels, kernel_size=1, stride=1, padding=0),
             nn.LeakyReLU(0.2, inplace=True)
         )
 
-        # Residual connection learnable weight
+    
         self.res_scale = nn.Parameter(torch.tensor(0.1))
 
     def forward(
@@ -107,10 +104,10 @@ class HMAM(nn.Module):
         B, C, H, W = x.shape
         residual = x
 
-        # Step 1: Hierarchical multi-scale feature alignment & fusion (Figure 3 input)
+   
         feat_list = [x]
 
-        # Align cross-layer features to the same spatial size and channel
+    
         if multi_scale_feats is not None and len(multi_scale_feats) == len(self.scale_proj):
             for feat, proj in zip(multi_scale_feats, self.scale_proj):
                 # Align spatial size to main input
@@ -119,28 +116,25 @@ class HMAM(nn.Module):
                 feat_proj = proj(feat_aligned)
                 feat_list.append(feat_proj)
 
-        # Concatenate all hierarchical features
+   
         fused_feat = torch.cat(feat_list, dim=1)
 
-        # Step 2: Input projection & reshape for attention
-        # [B, total_dim, H, W] -> [B, N, total_dim], N = H*W
+    
         x_proj = self.in_proj(fused_feat)
         x_flat = x_proj.flatten(2).transpose(1, 2)  # [B, N, total_dim]
         x_norm = self.norm(x_flat)
 
-        # Step 3: Split into multiple heads & compute external attention
-        # Split along channel dimension: [B, N, total_dim] -> num_heads * [B, N, d_head]
+  
         x_heads = torch.chunk(x_norm, self.num_heads, dim=-1)
         head_outputs = [head(x_h) for head, x_h in zip(self.heads, x_heads)]
 
-        # Step 4: Concatenate all head outputs (formula 17)
-        # [B, N, total_dim]
+    
         multi_head_out = torch.cat(head_outputs, dim=-1)
 
-        # Step 5: Reshape back to 2D feature map
+
         multi_head_out = multi_head_out.transpose(1, 2).reshape(B, self.total_dim, H, W)
 
-        # Step 6: Output projection & residual connection
+
         out = self.out_proj(multi_head_out)
         out = residual + self.res_scale * out
 
@@ -153,9 +147,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Testing HMAM on device: {device}")
 
-    # ==============================================
-    # Test 1: Single-scale input (for discriminator)
-    # ==============================================
+
     print("\n=== Test 1: Single-scale input ===")
     hmam_single = HMAM(in_channels=256, num_heads=6, d_head=64).to(device)
 
@@ -168,9 +160,8 @@ if __name__ == "__main__":
     print(f"Output shape: {output.shape}")
     print("Single-scale test passed! Input/output dimension matches.")
 
-    # ==============================================
-    # Test 2: Multi-scale hierarchical input (for generator decoder)
-    # ==============================================
+ 
+
     print("\n=== Test 2: Multi-scale hierarchical input ===")
     # Main input channel=128, 3 hierarchical encoder features with [64, 128, 256] channels
     hmam_multi = HMAM(
@@ -196,9 +187,7 @@ if __name__ == "__main__":
     print(f"Output shape: {output_multi.shape}")
     print("Multi-scale test passed! Cross-layer feature fusion works normally.")
 
-    # ==============================================
-    # Test 3: Gradient flow check
-    # ==============================================
+
     print("\n=== Test 3: Gradient flow check ===")
     hmam_train = HMAM(in_channels=128, multi_scale_channels=[64]).to(device)
     hmam_train.train()
