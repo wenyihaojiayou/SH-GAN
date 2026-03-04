@@ -16,6 +16,7 @@ SH-GAN addresses the challenges of texture distortion, edge blurring, and color 
 - Other dependencies:
   ```bash
   pip install opencv-python==4.6.0.66 numpy==1.23.5 scipy==1.9.3 pillow==9.3.0 torchvision==0.13.1 tqdm==4.64.1
+  
 ##  Datasets
 The experiments are conducted on three public benchmark datasets:
 Places2: http://places2.csail.mit.edu/
@@ -25,11 +26,9 @@ Facade: https://cmp.felk.cvut.cz/~tylecr1/facade/
 ## Training
 Set your dataset path in configs/default.yaml 
 Run:
-```bash
 python train.py --config configs/default.yaml
 
 ## Testing
 Run:
-```bash
 python test.py --config configs/default.yaml --checkpoint path/to/your/model.pth
 
