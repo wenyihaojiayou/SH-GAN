@@ -1,6 +1,6 @@
 # SH-GAN: Enhanced Image Inpainting via Self-Similarity Haar Transform and Multi-Scale Feature Feedback GAN
 
-This repository contains the official implementation of the paper **"Enhanced Image Inpainting via Self-Similarity Haar Transform and Multi-Scale Feature Feedback GAN"**, submitted to *The Visual Computer* 
+the paper **"Enhanced Image Inpainting via Self-Similarity Haar Transform and Multi-Scale Feature Feedback GAN"**, submitted to *The Visual Computer*  This code is exclusively associated with the manuscript submitted to *The Visual Computer*
 
 ## Overview
 SH-GAN addresses the challenges of texture distortion, edge blurring, and color inconsistency in complex damaged region image inpainting by integrating:
@@ -23,9 +23,13 @@ CelebA: https://mmlab.ie.cuhk.edu.hk/projects/CelebA.html
 Facade: https://cmp.felk.cvut.cz/~tylecr1/facade/
 
 ## Training
-Set your dataset path in configs/default.yaml
-Run:python train.py --config configs/default.yaml
+Set your dataset path in configs/default.yaml 
+Run:
+```bash
+python train.py --config configs/default.yaml
 
 ## Testing
-Run:python test.py --config configs/default.yaml --checkpoint path/to/your/model.pth
+Run:
+```bash
+python test.py --config configs/default.yaml --checkpoint path/to/your/model.pth
 
