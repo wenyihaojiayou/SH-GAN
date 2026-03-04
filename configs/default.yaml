@@ -1,0 +1,89 @@
+project:
+  name: SH-GAN
+  seed: 42
+  device: cuda
+
+dataset:
+  train_dir: ./data/train
+  val_dir: ./data/val
+  test_dir: ./data/test
+  mask_dir: ./data/masks
+  image_size: 256
+  batch_size: 16
+  num_workers: 4
+
+model:
+  in_channels: 7
+  out_channels: 3
+  base_channels: 64
+  hmam_heads: 6
+  hmam:
+    d_head: 64
+    mem_dim: 256
+  shtm:
+    block_size: 8
+    search_window: 21
+    topk_blocks: 8
+    topk_rows: 4
+    tau_valid_ratio: 0.4
+    max_iter: 3
+    freeze_shtm: false
+  discriminator:
+    base_channels: 64
+    crop_size: 256
+
+
+training:
+  epochs: 80
+  epoch_config:
+    Facade: 200
+    CelebA: 50
+    Places2: 80
+  lr_g: 0.0002
+  lr_d: 0.0001
+  beta1: 0.5
+  beta2: 0.999
+  weight_decay: 0.0001
+  lambda_adv: 0.1
+  lambda_gp: 10
+  lambda_mix: 0.1
+  warmup_steps: 1500
+  lr_decay_rate: 0.5
+  lr_decay_steps: 100000
+  min_lr: 1e-6
+  n_critic: 1
+  gradient_clip_val: 1.0
+  gradient_accumulation_steps: 1
+  fp16: false
+  resume_training: false
+  resume_checkpoint: ""
+
+loss:
+  use_hwal: True
+  content_weight: 1.0
+  style_weight: 120.0
+  color_weight: 50.0
+
+logging:
+  log_interval: 100
+  save_interval: 5
+  val_interval: 5
+  keep_checkpoint_max: 5
+  use_tensorboard: true
+  use_wandb: false
+  print_loss_details: true
+  checkpoint_dir: ./checkpoints
+  result_dir: ./results
+  log_dir: ./logs
+
+  evaluation:
+    test_batch_size: 8
+    save_val_results: true
+    save_test_results: true
+    metrics:
+      psnr_ssim: true
+      lpips: true
+      fid: true
+    fid:
+      max_samples: 10000
+      batch_size: 16
