@@ -22,10 +22,10 @@ Places2: http://places2.csail.mit.edu/
 CelebA: https://mmlab.ie.cuhk.edu.hk/projects/CelebA.html
 Facade: https://cmp.felk.cvut.cz/~tylecr1/facade/
 
-Training
+## Training
 Set your dataset path in configs/default.yaml
 Run:python train.py --config configs/default.yaml
 
-Testing
+## Testing
 Run:python test.py --config configs/default.yaml --checkpoint path/to/your/model.pth
 
